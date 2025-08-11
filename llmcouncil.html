@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The LLM Council</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #121212;
+            color: #e0e0e0;
+            overflow-x: hidden;
+        }
+        .main-container {
+            transition: transform 0.3s ease;
+            min-height: 100vh;
+        }
+        .main-container.shifted {
+            transform: translateX(300px);
+        }
+        .sidebar {
+            width: 300px;
+            position: fixed;
+            top: 0;
+            left: 0;
+            height: 100vh;
+            background-color: #1f2937;
+            color: #d1d5db;
+            padding: 1.5rem;
+            transform: translateX(-300px);
+            transition: transform 0.3s ease;
+            z-index: 10;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.5);
+            overflow-y: auto;
+        }
+        .sidebar.open {
+            transform: translateX(0);
+        }
+        .hamburger-menu {
+            position: fixed;
+            top: 1rem;
+            left: 1rem;
+            z-index: 20;
+            cursor: pointer;
+            padding: 0.5rem;
+            border-radius: 0.5rem;
+            background-color: #4f46e5;
+            transition: transform 0.3s ease, background-color 0.2s;
+        }
+        .hamburger-menu:hover {
+            background-color: #4338ca;
+        }
+        .hamburger-menu.open {
+            transform: translateX(300px);
+        }
+        .hamburger-menu span {
+            display: block;
+            width: 25px;
+            height: 3px;
+            background-color: white;
+            margin: 5px 0;
+            transition: all 0.3s ease-in-out;
+        }
+        .hamburger-menu.open span:nth-child(1) {
+            transform: rotate(-45deg) translate(-5px, 6px);
+        }
+        .hamburger-menu.open span:nth-child(2) {
+            opacity: 0;
+        }
+        .hamburger-menu.open span:nth-child(3) {
+            transform: rotate(45deg) translate(-5px, -6px);
+        }
+        .model-config-item {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            background-color: #374151;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            cursor: grab;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .model-config-item:active {
+            cursor: grabbing;
+        }
+        .model-config-item.dragging {
+            opacity: 0.5;
+            transform: scale(1.05);
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+        }
+        .model-config-item input[type="text"] {
+            background-color: #1f2937;
+            color: #e0e0e0;
+            border: 1px solid #4b5563;
+            padding: 0.5rem;
+            border-radius: 0.5rem;
+        }
+        .model-config-item input[type="text"]:focus {
+            outline: none;
+            border-color: #6366f1;
+        }
+        .drop-zone {
+            min-height: 50px;
+            padding: 1rem;
+            border: 2px dashed #4b5563;
+            border-radius: 0.75rem;
+            background-color: #1f2937;
+            transition: background-color 0.2s, border-color 0.2s;
+        }
+        .drop-zone.drag-over {
+            background-color: #374151;
+            border-color: #6366f1;
+        }
+        .response-box {
+            animation: fadeIn 0.5s ease-in-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .prose {
+            color: #d1d5db;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-200 flex flex-col items-center p-4">
+
+    <!-- Hamburger Menu Button -->
+    <div id="hamburger-menu" class="hamburger-menu">
+        <span></span>
+        <span></span>
+        <span></span>
+    </div>
+
+    <!-- Sidebar / Setup Tab -->
+    <div id="sidebar" class="sidebar">
+        <h2 class="text-xl font-bold mb-6 text-white">Council Setup</h2>
+
+        <div id="setup-status" class="mb-4 text-center text-sm font-semibold text-red-400">
+            Council setup needed.
+        </div>
+
+        <div class="space-y-4">
+            <h3 class="text-lg font-bold text-gray-300">Speaker</h3>
+            <div id="speaker-zone" class="drop-zone"></div>
+            <h3 class="text-lg font-bold text-gray-300">Council Members (4)</h3>
+            <div id="council-zone" class="drop-zone min-h-[220px]"></div>
+            <h3 class="text-lg font-bold text-gray-300">Unused Models</h3>
+            <div id="unused-zone" class="drop-zone"></div>
+        </div>
+
+        <button id="save-config" class="mt-8 w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-xl transition duration-200">
+            Save Configuration
+        </button>
+        <div id="save-status" class="mt-4 text-center text-sm font-semibold"></div>
+    </div>
+
+    <!-- Main Content Area -->
+    <div id="main-content" class="main-container flex flex-col items-center justify-center min-h-screen px-4 py-16">
+        <div class="max-w-4xl w-full mx-auto p-8 bg-gray-800 rounded-3xl shadow-xl space-y-8">
+            <h1 class="text-4xl font-extrabold text-center text-gray-100">The LLM Council</h1>
+            <p class="text-center text-gray-400 text-lg">
+                Drag and drop models to form your council and select a speaker.
+            </p>
+            
+            <div class="relative">
+                <textarea id="prompt-input" rows="4" class="w-full p-4 border border-gray-600 rounded-2xl bg-gray-900 text-gray-100 placeholder-gray-500 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors" placeholder="Enter your query here..."></textarea>
+                <div class="absolute bottom-4 right-4 flex items-center space-x-2">
+                    <button id="send-prompt" class="px-6 py-2 bg-indigo-600 text-white font-semibold rounded-full shadow-lg hover:bg-indigo-700 transition transform hover:scale-105 disabled:bg-gray-400 disabled:cursor-not-allowed">
+                        Send
+                    </button>
+                </div>
+            </div>
+
+            <div id="response-container" class="space-y-6">
+                <!-- LLM responses will be injected here -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const hamburgerMenu = document.getElementById('hamburger-menu');
+            const sidebar = document.getElementById('sidebar');
+            const mainContent = document.getElementById('main-content');
+            const saveConfigButton = document.getElementById('save-config');
+            const saveStatus = document.getElementById('save-status');
+            const promptInput = document.getElementById('prompt-input');
+            const sendPromptButton = document.getElementById('send-prompt');
+            const responseContainer = document.getElementById('response-container');
+            const setupStatus = document.getElementById('setup-status');
+
+            const speakerZone = document.getElementById('speaker-zone');
+            const councilZone = document.getElementById('council-zone');
+            const unusedZone = document.getElementById('unused-zone');
+
+            // Model definitions with key instructions
+            const allModels = [
+                { id: "gemini", name: "Google Gemini (flash)", apiKeyRequired: true, apiUrl: `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent`, keyInfo: "Get your key from Google AI Studio or the Google Cloud Console." },
+                { id: "openai-gpt", name: "OpenAI GPT-4", apiKeyRequired: true, apiUrl: "https://api.openai.com/v1/chat/completions", keyInfo: "Find your key on the OpenAI API Keys dashboard." },
+                { id: "groq-mixtral", name: "Groq Mixtral", apiKeyRequired: true, apiUrl: "https://api.groq.com/openai/v1/chat/completions", keyInfo: "Get your key from the GroqCloud developer dashboard." },
+                { id: "mistral-instruct", name: "Mistral Instruct", apiKeyRequired: true, apiUrl: "https://api.mistral.ai/v1/chat/completions", keyInfo: "Find your key in the Mistral AI Console." },
+                { id: "llama-3", name: "Meta Llama-3", apiKeyRequired: true, apiUrl: "https://api.groq.com/openai/v1/chat/completions", keyInfo: "Get your key from the GroqCloud developer dashboard. You can use the same key for Groq Mixtral." },
+                { id: "claude-haiku", name: "Anthropic Claude 3 Haiku", apiKeyRequired: true, apiUrl: "https://api.anthropic.com/v1/messages", keyInfo: "Find your key on the Anthropic console." },
+                { id: "cohere", name: "Cohere Command", apiKeyRequired: true, apiUrl: "https://api.cohere.ai/v1/chat", keyInfo: "Get your key from the Cohere dashboard." },
+                { id: "deepseek", name: "DeepSeek Coder", apiKeyRequired: true, apiUrl: "https://api.deepseek.com/v1/chat/completions", keyInfo: "Find your key on the DeepSeek API console." },
+                { id: "together-llama", name: "Together AI Llama 3", apiKeyRequired: true, apiUrl: "https://api.together.xyz/v1/chat/completions", keyInfo: "Get your key from the Together AI platform." },
+                { id: "huggingface", name: "Hugging Face (Inference API)", apiKeyRequired: true, apiUrl: "https://api-inference.huggingface.co/models/", keyInfo: "Find your user token in your Hugging Face profile settings under 'Access Tokens'." },
+            ];
+
+            let modelConfigurations = {};
+            const localStorageKey = 'llmCouncilConfig_v3';
+            let currentDragModelId = null;
+
+            // Function to get a random subset of an array
+            function getRandomSubset(arr, size) {
+                const shuffled = arr.slice().sort(() => 0.5 - Math.random());
+                return shuffled.slice(0, size);
+            }
+
+            // Load from local storage or initialize
+            function loadConfig() {
+                const savedConfig = localStorage.getItem(localStorageKey);
+                if (savedConfig) {
+                    modelConfigurations = JSON.parse(savedConfig);
+                } else {
+                    const randomModels = getRandomSubset(allModels, 5);
+                    modelConfigurations = allModels.reduce((acc, model) => {
+                        acc[model.id] = {
+                            apiKey: "",
+                            zone: randomModels.some(rm => rm.id === model.id) ? (randomModels[0].id === model.id ? 'speaker' : 'council') : 'unused',
+                            ...model
+                        };
+                        return acc;
+                    }, {});
+                }
+            }
+
+            function renderModelConfig() {
+                speakerZone.innerHTML = '';
+                councilZone.innerHTML = '';
+                unusedZone.innerHTML = '';
+
+                allModels.forEach(model => {
+                    const config = modelConfigurations[model.id];
+                    const modelItem = document.createElement('div');
+                    modelItem.classList.add('model-config-item', 'bg-gray-700', 'p-4', 'rounded-xl', 'shadow-md', 'mb-2', 'flex', 'flex-col', 'gap-2');
+                    modelItem.draggable = true;
+                    modelItem.dataset.modelId = model.id;
+
+                    modelItem.innerHTML = `
+                        <div class="flex items-center justify-between">
+                            <span class="font-bold text-gray-200">${model.name}</span>
+                            <span class="info-icon text-gray-400 cursor-pointer hover:text-indigo-400">i</span>
+                        </div>
+                        <div class="key-info-container hidden text-sm bg-gray-600 p-2 rounded-lg text-gray-300">
+                            ${model.keyInfo}
+                        </div>
+                        <input type="text" class="w-full text-sm mt-1" placeholder="Enter API Key" data-model-id="${model.id}" value="${config.apiKey}">
+                    `;
+
+                    const apiKeyInput = modelItem.querySelector('input[type="text"]');
+                    apiKeyInput.addEventListener('input', (e) => {
+                        modelConfigurations[model.id].apiKey = e.target.value;
+                    });
+
+                    const infoIcon = modelItem.querySelector('.info-icon');
+                    infoIcon.addEventListener('click', () => {
+                        const infoContainer = modelItem.querySelector('.key-info-container');
+                        infoContainer.classList.toggle('hidden');
+                    });
+
+                    if (config.zone === 'speaker') {
+                        speakerZone.appendChild(modelItem);
+                    } else if (config.zone === 'council') {
+                        councilZone.appendChild(modelItem);
+                    } else {
+                        unusedZone.appendChild(modelItem);
+                    }
+                });
+                updateSetupStatus();
+            }
+
+            function updateSetupStatus() {
+                const speakerCount = speakerZone.childElementCount;
+                const councilCount = councilZone.childElementCount;
+                const isSetupComplete = speakerCount === 1 && councilCount === 4;
+
+                if (isSetupComplete) {
+                    setupStatus.textContent = "Council is ready.";
+                    setupStatus.classList.remove('text-red-400');
+                    setupStatus.classList.add('text-green-400');
+                } else {
+                    setupStatus.textContent = "Council setup needed.";
+                    setupStatus.classList.remove('text-green-400');
+                    setupStatus.classList.add('text-red-400');
+                }
+
+                sendPromptButton.disabled = !isSetupComplete;
+            }
+
+            // --- Drag & Drop Event Listeners ---
+            function handleDragStart(event) {
+                currentDragModelId = event.target.dataset.modelId;
+                event.dataTransfer.setData('text/plain', currentDragModelId);
+                event.target.classList.add('dragging');
+            }
+
+            function handleDragEnd(event) {
+                event.target.classList.remove('dragging');
+            }
+
+            function handleDragOver(event) {
+                event.preventDefault();
+                const dropZone = event.currentTarget;
+                dropZone.classList.add('drag-over');
+            }
+
+            function handleDragLeave(event) {
+                const dropZone = event.currentTarget;
+                dropZone.classList.remove('drag-over');
+            }
+
+            function handleDrop(event) {
+                event.preventDefault();
+                const dropZone = event.currentTarget;
+                dropZone.classList.remove('drag-over');
+                
+                const modelId = event.dataTransfer.getData('text/plain');
+                const draggedItem = document.querySelector(`.model-config-item[data-model-id="${modelId}"]`);
+                
+                // Special logic for speaker zone: it can only hold one item
+                if (dropZone.id === 'speaker-zone' && dropZone.childElementCount > 0) {
+                    const existingItem = dropZone.firstElementChild;
+                    unusedZone.appendChild(existingItem);
+                }
+                
+                // Special logic for council zone: it can only hold four items
+                if (dropZone.id === 'council-zone' && dropZone.childElementCount >= 4) {
+                    const existingItem = dropZone.firstElementChild;
+                    unusedZone.appendChild(existingItem);
+                }
+
+                if (draggedItem) {
+                    dropZone.appendChild(draggedItem);
+                }
+
+                updateSetupStatus();
+            }
+            
+            document.querySelectorAll('.drop-zone').forEach(zone => {
+                zone.addEventListener('dragover', handleDragOver);
+                zone.addEventListener('dragleave', handleDragLeave);
+                zone.addEventListener('drop', handleDrop);
+            });
+            document.addEventListener('dragstart', handleDragStart);
+            document.addEventListener('dragend', handleDragEnd);
+
+            // --- Other Event Listeners ---
+
+            hamburgerMenu.addEventListener('click', () => {
+                sidebar.classList.toggle('open');
+                mainContent.classList.toggle('shifted');
+                hamburgerMenu.classList.toggle('open');
+            });
+
+            saveConfigButton.addEventListener('click', () => {
+                const newConfigurations = {};
+                const speakerModel = speakerZone.querySelector('.model-config-item');
+                const councilModels = councilZone.querySelectorAll('.model-config-item');
+                const unusedModels = unusedZone.querySelectorAll('.model-config-item');
+
+                // Update model configurations based on current zones
+                allModels.forEach(model => {
+                    newConfigurations[model.id] = { ...modelConfigurations[model.id], zone: 'unused' }; // Reset zones
+                });
+
+                if (speakerModel) {
+                    const modelId = speakerModel.dataset.modelId;
+                    const apiKeyInput = speakerModel.querySelector('input[type="text"]');
+                    newConfigurations[modelId].zone = 'speaker';
+                    newConfigurations[modelId].apiKey = apiKeyInput.value;
+                }
+                councilModels.forEach(modelItem => {
+                    const modelId = modelItem.dataset.modelId;
+                    const apiKeyInput = modelItem.querySelector('input[type="text"]');
+                    newConfigurations[modelId].zone = 'council';
+                    newConfigurations[modelId].apiKey = apiKeyInput.value;
+                });
+                unusedModels.forEach(modelItem => {
+                    const modelId = modelItem.dataset.modelId;
+                    const apiKeyInput = modelItem.querySelector('input[type="text"]');
+                    newConfigurations[modelId].zone = 'unused';
+                    newConfigurations[modelId].apiKey = apiKeyInput.value;
+                });
+                
+                // Save and update
+                modelConfigurations = newConfigurations;
+                localStorage.setItem(localStorageKey, JSON.stringify(modelConfigurations));
+                saveStatus.textContent = "Configuration saved successfully!";
+                saveStatus.className = 'mt-4 text-center text-sm font-semibold text-green-500';
+
+                // Hide sidebar after saving
+                sidebar.classList.remove('open');
+                mainContent.classList.remove('shifted');
+                hamburgerMenu.classList.remove('open');
+                updateSetupStatus();
+            });
+
+            // Initial load
+            loadConfig();
+            renderModelConfig();
+            updateSetupStatus();
+
+            // Function to handle API calls with exponential backoff
+            async function callAPI(model, prompt) {
+                const maxRetries = 5;
+                let currentRetry = 0;
+                let delay = 1000;
+                
+                let payload = {
+                    "model": model.name.toLowerCase().replace(/ /g, '-').replace('(flash)', ''),
+                    "messages": [{ "role": "user", "content": prompt }]
+                };
+
+                if (model.id === "gemini") {
+                    payload = { contents: [{ role: "user", parts: [{ text: prompt }] }] };
+                } else if (model.id === "claude-haiku") {
+                    payload = { messages: [{ role: "user", content: prompt }] };
+                } else if (model.id === "cohere") {
+                    payload = { message: prompt };
+                }
+
+                while (currentRetry < maxRetries) {
+                    try {
+                        const headers = { 'Content-Type': 'application/json' };
+                        const finalUrl = model.apiUrl;
+                        
+                        if (model.apiKeyRequired) {
+                            if (!model.apiKey) {
+                                throw new Error("API key is missing.");
+                            }
+                            if (model.id === 'gemini') {
+                                headers['X-goog-api-key'] = model.apiKey;
+                            } else if (model.id === 'claude-haiku') {
+                                headers['x-api-key'] = model.apiKey;
+                                headers['anthropic-version'] = '2023-06-01';
+                            } else {
+                                headers['Authorization'] = `Bearer ${model.apiKey}`;
+                            }
+                        }
+                        
+                        const response = await fetch(finalUrl, {
+                            method: 'POST',
+                            headers: headers,
+                            body: JSON.stringify(payload)
+                        });
+
+                        if (!response.ok) {
+                            throw new Error(`HTTP error! status: ${response.status}`);
+                        }
+                        
+                        const result = await response.json();
+                        let text = "Response not parsed correctly.";
+
+                        if (model.id === "gemini") {
+                            text = result?.candidates?.[0]?.content?.parts?.[0]?.text || text;
+                        } else if (model.id === "claude-haiku") {
+                            text = result?.content?.[0]?.text || text;
+                        } else if (model.id === "cohere") {
+                            text = result?.text || text;
+                        } else {
+                            text = result?.choices?.[0]?.message?.content || text;
+                        }
+                        return text;
+                    } catch (error) {
+                        console.error(`Error with ${model.name} (Attempt ${currentRetry + 1}):`, error);
+                        currentRetry++;
+                        if (currentRetry < maxRetries) {
+                            await new Promise(resolve => setTimeout(resolve, delay));
+                            delay *= 2;
+                        } else {
+                            return `Error: Failed to get a response from ${model.name}. Check your API key and network connection.`;
+                        }
+                    }
+                }
+                return `Error: Maximum retries exceeded for ${model.name}.`;
+            }
+
+            // Send prompt button logic
+            sendPromptButton.addEventListener('click', async () => {
+                const originalPrompt = promptInput.value;
+                if (!originalPrompt.trim()) {
+                    responseContainer.innerHTML = `<div class="p-4 bg-yellow-900 text-yellow-300 rounded-lg">Please enter a prompt.</div>`;
+                    return;
+                }
+
+                const speaker = Object.values(modelConfigurations).find(m => m.zone === 'speaker');
+                const councilMembers = Object.values(modelConfigurations).filter(m => m.zone === 'council');
+                
+                if (!speaker || councilMembers.length !== 4) {
+                    responseContainer.innerHTML = `<div class="p-4 bg-red-900 text-red-300 rounded-lg">Please complete the council setup first.</div>`;
+                    return;
+                }
+                
+                responseContainer.innerHTML = '<div class="text-center text-gray-400 animate-pulse">Generating council responses...</div>';
+                
+                const memberResponses = await Promise.all(councilMembers.map(model => callAPI(model, originalPrompt)));
+
+                responseContainer.innerHTML = '<div class="text-center text-gray-400 animate-pulse">Speaker is synthesizing the council\'s responses...</div>';
+                
+                const synthesisPrompt = `You are a council speaker. The original query was: "${originalPrompt}". The council members have provided the following responses:\n\n${memberResponses.map((r, i) => `Response ${i+1}: ${r}`).join('\n\n')}\n\nSynthesize these responses into a single, comprehensive, and well-structured answer.`;
+
+                const speakerResponse = await callAPI(speaker, synthesisPrompt);
+
+                responseContainer.innerHTML = `
+                    <div class="speaker-response-container">
+                        <div class="response-box bg-gray-700 p-6 rounded-2xl shadow-sm border border-indigo-600">
+                            <h3 class="text-lg font-bold text-indigo-400 mb-2">${speaker.name} (Council Speaker)</h3>
+                            <div class="prose max-w-none text-gray-200">
+                                ${speakerResponse}
+                            </div>
+                            <button id="toggle-members" class="mt-4 px-4 py-2 bg-gray-600 text-white rounded-full text-sm font-semibold hover:bg-gray-500 transition-colors">
+                                Show Individual Responses
+                            </button>
+                        </div>
+                        <div id="member-responses-container" class="mt-4 space-y-4 hidden">
+                            <!-- Individual responses will go here -->
+                        </div>
+                    </div>
+                `;
+                
+                const memberResponsesContainer = document.getElementById('member-responses-container');
+                memberResponses.forEach((response, index) => {
+                    const model = councilMembers[index];
+                    const responseHTML = `
+                        <div class="response-box bg-gray-800 p-6 rounded-2xl shadow-sm">
+                            <h4 class="text-base font-bold text-gray-300 mb-2">${model.name}</h4>
+                            <div class="prose max-w-none text-gray-400">${response}</div>
+                        </div>
+                    `;
+                    memberResponsesContainer.innerHTML += responseHTML;
+                });
+
+                document.getElementById('toggle-members').addEventListener('click', () => {
+                    memberResponsesContainer.classList.toggle('hidden');
+                });
+            });
+        });
+    </script>
+</body>
+</html>
