@@ -28,6 +28,7 @@
             background-color: #1f2937;
             color: #d1d5db;
             padding: 1.5rem;
+            padding-top: 4rem; /* Added padding to clear the hamburger menu */
             transform: translateX(-300px);
             transition: transform 0.3s ease;
             z-index: 10;
@@ -78,10 +79,12 @@
             background-color: #374151;
             padding: 1rem;
             border-radius: 0.5rem;
-            cursor: grab;
             transition: transform 0.2s, box-shadow 0.2s;
         }
-        .model-config-item:active {
+        .model-config-item.draggable {
+            cursor: grab;
+        }
+        .model-config-item.draggable:active {
             cursor: grabbing;
         }
         .model-config-item.dragging {
@@ -122,19 +125,46 @@
         .prose {
             color: #d1d5db;
         }
+        .history-item {
+            cursor: pointer;
+            padding: 0.75rem;
+            background-color: #1f2937;
+            border-radius: 0.5rem;
+            transition: background-color 0.2s;
+        }
+        .history-item:hover {
+            background-color: #374151;
+        }
+        .info-button {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background-color: #4b5563;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.85rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .info-button:hover {
+            background-color: #6366f1;
+        }
     </style>
 </head>
 <body class="bg-gray-900 text-gray-200 flex flex-col items-center p-4">
 
     <!-- Hamburger Menu Button -->
-    <div id="hamburger-menu" class="hamburger-menu">
+    <div id="hamburger-menu" class="hamburger-menu open">
         <span></span>
         <span></span>
         <span></span>
     </div>
 
     <!-- Sidebar / Setup Tab -->
-    <div id="sidebar" class="sidebar">
+    <div id="sidebar" class="sidebar open">
         <h2 class="text-xl font-bold mb-6 text-white">Council Setup</h2>
 
         <div id="setup-status" class="mb-4 text-center text-sm font-semibold text-red-400">
@@ -142,26 +172,24 @@
         </div>
 
         <div class="space-y-4">
-            <h3 class="text-lg font-bold text-gray-300">Speaker</h3>
+            <h3 class="text-lg font-bold text-gray-300">Speaker (1)</h3>
             <div id="speaker-zone" class="drop-zone"></div>
-            <h3 class="text-lg font-bold text-gray-300">Council Members (4)</h3>
-            <div id="council-zone" class="drop-zone min-h-[220px]"></div>
-            <h3 class="text-lg font-bold text-gray-300">Unused Models</h3>
-            <div id="unused-zone" class="drop-zone"></div>
+            <h3 class="text-lg font-bold text-gray-300">Council Members (2-6)</h3>
+            <div id="member-zone" class="drop-zone min-h-[220px]"></div>
+            <h3 class="text-lg font-bold text-gray-300">Configured Models</h3>
+            <div id="configured-zone" class="drop-zone"></div>
+            <h3 class="text-lg font-bold text-gray-300">Unconfigured Models</h3>
+            <div id="unconfigured-zone" class="drop-zone"></div>
         </div>
-
-        <button id="save-config" class="mt-8 w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-xl transition duration-200">
-            Save Configuration
-        </button>
-        <div id="save-status" class="mt-4 text-center text-sm font-semibold"></div>
+        <div id="save-status" class="mt-4 text-center text-sm font-semibold text-green-500"></div>
     </div>
 
     <!-- Main Content Area -->
-    <div id="main-content" class="main-container flex flex-col items-center justify-center min-h-screen px-4 py-16">
+    <div id="main-content" class="main-container shifted flex flex-col items-center justify-center min-h-screen px-4 py-16">
         <div class="max-w-4xl w-full mx-auto p-8 bg-gray-800 rounded-3xl shadow-xl space-y-8">
             <h1 class="text-4xl font-extrabold text-center text-gray-100">The LLM Council</h1>
             <p class="text-center text-gray-400 text-lg">
-                Drag and drop models to form your council and select a speaker.
+                Leverage a council of LLMs to generate a comprehensive, synthesized response to your query.
             </p>
             
             <div class="relative">
@@ -176,6 +204,13 @@
             <div id="response-container" class="space-y-6">
                 <!-- LLM responses will be injected here -->
             </div>
+
+            <div id="history-container" class="mt-8">
+                <h2 class="text-2xl font-bold text-gray-100 mb-4">History</h2>
+                <div id="history-list" class="space-y-2">
+                    <!-- History items will be injected here -->
+                </div>
+            </div>
         </div>
     </div>
 
@@ -184,40 +219,128 @@
             const hamburgerMenu = document.getElementById('hamburger-menu');
             const sidebar = document.getElementById('sidebar');
             const mainContent = document.getElementById('main-content');
-            const saveConfigButton = document.getElementById('save-config');
             const saveStatus = document.getElementById('save-status');
             const promptInput = document.getElementById('prompt-input');
             const sendPromptButton = document.getElementById('send-prompt');
             const responseContainer = document.getElementById('response-container');
             const setupStatus = document.getElementById('setup-status');
+            const historyList = document.getElementById('history-list');
 
             const speakerZone = document.getElementById('speaker-zone');
-            const councilZone = document.getElementById('council-zone');
-            const unusedZone = document.getElementById('unused-zone');
+            const memberZone = document.getElementById('member-zone');
+            const configuredZone = document.getElementById('configured-zone');
+            const unconfiguredZone = document.getElementById('unconfigured-zone');
 
-            // Model definitions with key instructions
+            // Model definitions with key instructions and refactored API logic
             const allModels = [
-                { id: "gemini", name: "Google Gemini (flash)", apiKeyRequired: true, apiUrl: `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent`, keyInfo: "Get your key from Google AI Studio or the Google Cloud Console." },
-                { id: "openai-gpt", name: "OpenAI GPT-4", apiKeyRequired: true, apiUrl: "https://api.openai.com/v1/chat/completions", keyInfo: "Find your key on the OpenAI API Keys dashboard." },
-                { id: "groq-mixtral", name: "Groq Mixtral", apiKeyRequired: true, apiUrl: "https://api.groq.com/openai/v1/chat/completions", keyInfo: "Get your key from the GroqCloud developer dashboard." },
-                { id: "mistral-instruct", name: "Mistral Instruct", apiKeyRequired: true, apiUrl: "https://api.mistral.ai/v1/chat/completions", keyInfo: "Find your key in the Mistral AI Console." },
-                { id: "llama-3", name: "Meta Llama-3", apiKeyRequired: true, apiUrl: "https://api.groq.com/openai/v1/chat/completions", keyInfo: "Get your key from the GroqCloud developer dashboard. You can use the same key for Groq Mixtral." },
-                { id: "claude-haiku", name: "Anthropic Claude 3 Haiku", apiKeyRequired: true, apiUrl: "https://api.anthropic.com/v1/messages", keyInfo: "Find your key on the Anthropic console." },
-                { id: "cohere", name: "Cohere Command", apiKeyRequired: true, apiUrl: "https://api.cohere.ai/v1/chat", keyInfo: "Get your key from the Cohere dashboard." },
-                { id: "deepseek", name: "DeepSeek Coder", apiKeyRequired: true, apiUrl: "https://api.deepseek.com/v1/chat/completions", keyInfo: "Find your key on the DeepSeek API console." },
-                { id: "together-llama", name: "Together AI Llama 3", apiKeyRequired: true, apiUrl: "https://api.together.xyz/v1/chat/completions", keyInfo: "Get your key from the Together AI platform." },
-                { id: "huggingface", name: "Hugging Face (Inference API)", apiKeyRequired: true, apiUrl: "https://api-inference.huggingface.co/models/", keyInfo: "Find your user token in your Hugging Face profile settings under 'Access Tokens'." },
+                {
+                    id: "gemini",
+                    name: "Google Gemini (flash)",
+                    apiKeyRequired: true,
+                    apiUrl: `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=`,
+                    keyInfo: "Get your key from Google AI Studio or the Google Cloud Console.",
+                    getPayload: (prompt) => ({ contents: [{ role: "user", parts: [{ text: prompt }] }] }),
+                    getHeaders: (apiKey) => ({ 'Content-Type': 'application/json', 'X-goog-api-key': apiKey }),
+                    getResponseText: (result) => result?.candidates?.[0]?.content?.parts?.[0]?.text
+                },
+                {
+                    id: "openai-gpt",
+                    name: "OpenAI GPT-4",
+                    apiKeyRequired: true,
+                    apiUrl: "https://api.openai.com/v1/chat/completions",
+                    keyInfo: "Find your key on the OpenAI API Keys dashboard.",
+                    getPayload: (prompt) => ({ "model": "gpt-4-turbo", "messages": [{ "role": "user", "content": prompt }] }),
+                    getHeaders: (apiKey) => ({ 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` }),
+                    getResponseText: (result) => result?.choices?.[0]?.message?.content
+                },
+                {
+                    id: "groq-mixtral",
+                    name: "Groq Mixtral",
+                    apiKeyRequired: true,
+                    apiUrl: "https://api.groq.com/openai/v1/chat/completions",
+                    keyInfo: "Get your key from the GroqCloud developer dashboard.",
+                    getPayload: (prompt) => ({ "model": "mixtral-8x7b-32768", "messages": [{ "role": "user", "content": prompt }] }),
+                    getHeaders: (apiKey) => ({ 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` }),
+                    getResponseText: (result) => result?.choices?.[0]?.message?.content
+                },
+                {
+                    id: "mistral-instruct",
+                    name: "Mistral Instruct",
+                    apiKeyRequired: true,
+                    apiUrl: "https://api.mistral.ai/v1/chat/completions",
+                    keyInfo: "Find your key in the Mistral AI Console.",
+                    getPayload: (prompt) => ({ "model": "mistral-large-latest", "messages": [{ "role": "user", "content": prompt }] }),
+                    getHeaders: (apiKey) => ({ 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` }),
+                    getResponseText: (result) => result?.choices?.[0]?.message?.content
+                },
+                {
+                    id: "llama-3",
+                    name: "Meta Llama-3",
+                    apiKeyRequired: true,
+                    apiUrl: "https://api.groq.com/openai/v1/chat/completions",
+                    keyInfo: "Get your key from the GroqCloud developer dashboard. You can use the same key for Groq Mixtral.",
+                    getPayload: (prompt) => ({ "model": "llama-3.1-8b-instant", "messages": [{ "role": "user", "content": prompt }] }),
+                    getHeaders: (apiKey) => ({ 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` }),
+                    getResponseText: (result) => result?.choices?.[0]?.message?.content
+                },
+                {
+                    id: "claude-haiku",
+                    name: "Anthropic Claude 3 Haiku",
+                    apiKeyRequired: true,
+                    apiUrl: "https://api.anthropic.com/v1/messages",
+                    keyInfo: "Find your key on the Anthropic console.",
+                    getPayload: (prompt) => ({ "model": "claude-3-haiku-20240307", "messages": [{ "role": "user", "content": prompt }], "max_tokens": 1024 }),
+                    getHeaders: (apiKey) => ({ 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' }),
+                    getResponseText: (result) => result?.content?.[0]?.text
+                },
+                {
+                    id: "cohere",
+                    name: "Cohere Command",
+                    apiKeyRequired: true,
+                    apiUrl: "https://api.cohere.ai/v1/chat",
+                    keyInfo: "Get your key from the Cohere dashboard.",
+                    getPayload: (prompt) => ({ "model": "command-r", "message": prompt }),
+                    getHeaders: (apiKey) => ({ 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` }),
+                    getResponseText: (result) => result?.text
+                },
+                {
+                    id: "deepseek",
+                    name: "DeepSeek Coder",
+                    apiKeyRequired: true,
+                    apiUrl: "https://api.deepseek.com/v1/chat/completions",
+                    keyInfo: "Find your key on the DeepSeek API console.",
+                    getPayload: (prompt) => ({ "model": "deepseek-coder", "messages": [{ "role": "user", "content": prompt }] }),
+                    getHeaders: (apiKey) => ({ 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` }),
+                    getResponseText: (result) => result?.choices?.[0]?.message?.content
+                },
+                {
+                    id: "together-llama",
+                    name: "Together AI Llama 3",
+                    apiKeyRequired: true,
+                    apiUrl: "https://api.together.xyz/v1/chat/completions",
+                    keyInfo: "Get your key from the Together AI platform.",
+                    getPayload: (prompt) => ({ "model": "meta-llama/Llama-3-8b-chat-hf", "messages": [{ "role": "user", "content": prompt }] }),
+                    getHeaders: (apiKey) => ({ 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` }),
+                    getResponseText: (result) => result?.choices?.[0]?.message?.content
+                },
+                {
+                    id: "huggingface",
+                    name: "Hugging Face (Inference API)",
+                    apiKeyRequired: true,
+                    apiUrl: "https://api-inference.huggingface.co/models/",
+                    keyInfo: "Find your user token in your Hugging Face profile settings under 'Access Tokens'.",
+                    getPayload: (prompt) => ({ "inputs": prompt }),
+                    getHeaders: (apiKey) => ({ 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` }),
+                    getResponseText: (result) => result?.[0]?.generated_text
+                },
             ];
 
             let modelConfigurations = {};
             const localStorageKey = 'llmCouncilConfig_v3';
-            let currentDragModelId = null;
-
-            // Function to get a random subset of an array
-            function getRandomSubset(arr, size) {
-                const shuffled = arr.slice().sort(() => 0.5 - Math.random());
-                return shuffled.slice(0, size);
-            }
+            const historyKey = 'llmCouncilHistory_v3';
+            let history = [];
+            const MAX_MEMBERS = 6;
+            const MIN_MEMBERS = 2;
 
             // Load from local storage or initialize
             function loadConfig() {
@@ -225,11 +348,11 @@
                 if (savedConfig) {
                     modelConfigurations = JSON.parse(savedConfig);
                 } else {
-                    const randomModels = getRandomSubset(allModels, 5);
+                    // Initial setup, all models are unconfigured
                     modelConfigurations = allModels.reduce((acc, model) => {
                         acc[model.id] = {
                             apiKey: "",
-                            zone: randomModels.some(rm => rm.id === model.id) ? (randomModels[0].id === model.id ? 'speaker' : 'council') : 'unused',
+                            zone: 'unconfigured',
                             ...model
                         };
                         return acc;
@@ -237,22 +360,59 @@
                 }
             }
 
+            function saveConfig() {
+                localStorage.setItem(localStorageKey, JSON.stringify(modelConfigurations));
+                saveStatus.textContent = "Configuration saved!";
+                saveStatus.className = 'mt-4 text-center text-sm font-semibold text-green-500';
+                setTimeout(() => {
+                    saveStatus.textContent = "";
+                }, 2000);
+                updateSetupStatus();
+            }
+
+            function loadHistory() {
+                const savedHistory = localStorage.getItem(historyKey);
+                if (savedHistory) {
+                    history = JSON.parse(savedHistory);
+                    renderHistory();
+                }
+            }
+
+            function renderHistory() {
+                historyList.innerHTML = '';
+                history.forEach((item, index) => {
+                    const historyItem = document.createElement('div');
+                    historyItem.classList.add('history-item', 'text-gray-200');
+                    historyItem.textContent = `${index + 1}. ${item.prompt.substring(0, 50)}...`;
+                    historyItem.addEventListener('click', () => {
+                        displayResponse(item.speakerResponse, item.memberResponses, item.speaker, item.councilMembers);
+                    });
+                    historyList.appendChild(historyItem);
+                });
+            }
+
             function renderModelConfig() {
                 speakerZone.innerHTML = '';
-                councilZone.innerHTML = '';
-                unusedZone.innerHTML = '';
+                memberZone.innerHTML = '';
+                configuredZone.innerHTML = '';
+                unconfiguredZone.innerHTML = '';
 
                 allModels.forEach(model => {
                     const config = modelConfigurations[model.id];
                     const modelItem = document.createElement('div');
                     modelItem.classList.add('model-config-item', 'bg-gray-700', 'p-4', 'rounded-xl', 'shadow-md', 'mb-2', 'flex', 'flex-col', 'gap-2');
-                    modelItem.draggable = true;
                     modelItem.dataset.modelId = model.id;
+
+                    const isConfigured = config.apiKey.trim() !== "";
+                    if (isConfigured && config.zone !== 'unconfigured') {
+                        modelItem.classList.add('draggable');
+                        modelItem.draggable = true;
+                    }
 
                     modelItem.innerHTML = `
                         <div class="flex items-center justify-between">
                             <span class="font-bold text-gray-200">${model.name}</span>
-                            <span class="info-icon text-gray-400 cursor-pointer hover:text-indigo-400">i</span>
+                            <button class="info-button">i</button>
                         </div>
                         <div class="key-info-container hidden text-sm bg-gray-600 p-2 rounded-lg text-gray-300">
                             ${model.keyInfo}
@@ -263,20 +423,26 @@
                     const apiKeyInput = modelItem.querySelector('input[type="text"]');
                     apiKeyInput.addEventListener('input', (e) => {
                         modelConfigurations[model.id].apiKey = e.target.value;
+                        const newZone = (e.target.value.trim() !== "") ? 'configured' : 'unconfigured';
+                        modelConfigurations[model.id].zone = newZone;
+                        saveConfig();
+                        renderModelConfig();
                     });
 
-                    const infoIcon = modelItem.querySelector('.info-icon');
-                    infoIcon.addEventListener('click', () => {
+                    const infoButton = modelItem.querySelector('.info-button');
+                    infoButton.addEventListener('click', () => {
                         const infoContainer = modelItem.querySelector('.key-info-container');
                         infoContainer.classList.toggle('hidden');
                     });
 
                     if (config.zone === 'speaker') {
                         speakerZone.appendChild(modelItem);
-                    } else if (config.zone === 'council') {
-                        councilZone.appendChild(modelItem);
+                    } else if (config.zone === 'member') {
+                        memberZone.appendChild(modelItem);
+                    } else if (config.zone === 'configured') {
+                        configuredZone.appendChild(modelItem);
                     } else {
-                        unusedZone.appendChild(modelItem);
+                        unconfiguredZone.appendChild(modelItem);
                     }
                 });
                 updateSetupStatus();
@@ -284,24 +450,28 @@
 
             function updateSetupStatus() {
                 const speakerCount = speakerZone.childElementCount;
-                const councilCount = councilZone.childElementCount;
-                const isSetupComplete = speakerCount === 1 && councilCount === 4;
+                const memberCount = memberZone.childElementCount;
+                const isSetupComplete = speakerCount === 1 && memberCount >= MIN_MEMBERS && memberCount <= MAX_MEMBERS;
 
                 if (isSetupComplete) {
                     setupStatus.textContent = "Council is ready.";
                     setupStatus.classList.remove('text-red-400');
                     setupStatus.classList.add('text-green-400');
+                    sendPromptButton.disabled = false;
                 } else {
-                    setupStatus.textContent = "Council setup needed.";
+                    setupStatus.textContent = `Council setup needed. (1 speaker, ${MIN_MEMBERS}-${MAX_MEMBERS} members)`;
                     setupStatus.classList.remove('text-green-400');
                     setupStatus.classList.add('text-red-400');
+                    sendPromptButton.disabled = true;
                 }
-
-                sendPromptButton.disabled = !isSetupComplete;
             }
 
             // --- Drag & Drop Event Listeners ---
             function handleDragStart(event) {
+                if (!event.target.classList.contains('draggable')) {
+                    event.preventDefault();
+                    return;
+                }
                 currentDragModelId = event.target.dataset.modelId;
                 event.dataTransfer.setData('text/plain', currentDragModelId);
                 event.target.classList.add('dragging');
@@ -330,23 +500,31 @@
                 const modelId = event.dataTransfer.getData('text/plain');
                 const draggedItem = document.querySelector(`.model-config-item[data-model-id="${modelId}"]`);
                 
-                // Special logic for speaker zone: it can only hold one item
-                if (dropZone.id === 'speaker-zone' && dropZone.childElementCount > 0) {
-                    const existingItem = dropZone.firstElementChild;
-                    unusedZone.appendChild(existingItem);
-                }
-                
-                // Special logic for council zone: it can only hold four items
-                if (dropZone.id === 'council-zone' && dropZone.childElementCount >= 4) {
-                    const existingItem = dropZone.firstElementChild;
-                    unusedZone.appendChild(existingItem);
+                let targetZone = '';
+                if (dropZone.id === 'speaker-zone') {
+                    if (dropZone.childElementCount > 0) {
+                        const existingItem = dropZone.firstElementChild;
+                        configuredZone.appendChild(existingItem);
+                    }
+                    targetZone = 'speaker';
+                } else if (dropZone.id === 'member-zone') {
+                    if (dropZone.childElementCount >= MAX_MEMBERS) {
+                        const existingItem = dropZone.firstElementChild;
+                        configuredZone.appendChild(existingItem);
+                    }
+                    targetZone = 'member';
+                } else if (dropZone.id === 'configured-zone') {
+                    targetZone = 'configured';
+                } else if (dropZone.id === 'unconfigured-zone') {
+                    targetZone = 'unconfigured';
                 }
 
                 if (draggedItem) {
                     dropZone.appendChild(draggedItem);
                 }
 
-                updateSetupStatus();
+                modelConfigurations[modelId].zone = targetZone;
+                saveConfig();
             }
             
             document.querySelectorAll('.drop-zone').forEach(zone => {
@@ -365,53 +543,10 @@
                 hamburgerMenu.classList.toggle('open');
             });
 
-            saveConfigButton.addEventListener('click', () => {
-                const newConfigurations = {};
-                const speakerModel = speakerZone.querySelector('.model-config-item');
-                const councilModels = councilZone.querySelectorAll('.model-config-item');
-                const unusedModels = unusedZone.querySelectorAll('.model-config-item');
-
-                // Update model configurations based on current zones
-                allModels.forEach(model => {
-                    newConfigurations[model.id] = { ...modelConfigurations[model.id], zone: 'unused' }; // Reset zones
-                });
-
-                if (speakerModel) {
-                    const modelId = speakerModel.dataset.modelId;
-                    const apiKeyInput = speakerModel.querySelector('input[type="text"]');
-                    newConfigurations[modelId].zone = 'speaker';
-                    newConfigurations[modelId].apiKey = apiKeyInput.value;
-                }
-                councilModels.forEach(modelItem => {
-                    const modelId = modelItem.dataset.modelId;
-                    const apiKeyInput = modelItem.querySelector('input[type="text"]');
-                    newConfigurations[modelId].zone = 'council';
-                    newConfigurations[modelId].apiKey = apiKeyInput.value;
-                });
-                unusedModels.forEach(modelItem => {
-                    const modelId = modelItem.dataset.modelId;
-                    const apiKeyInput = modelItem.querySelector('input[type="text"]');
-                    newConfigurations[modelId].zone = 'unused';
-                    newConfigurations[modelId].apiKey = apiKeyInput.value;
-                });
-                
-                // Save and update
-                modelConfigurations = newConfigurations;
-                localStorage.setItem(localStorageKey, JSON.stringify(modelConfigurations));
-                saveStatus.textContent = "Configuration saved successfully!";
-                saveStatus.className = 'mt-4 text-center text-sm font-semibold text-green-500';
-
-                // Hide sidebar after saving
-                sidebar.classList.remove('open');
-                mainContent.classList.remove('shifted');
-                hamburgerMenu.classList.remove('open');
-                updateSetupStatus();
-            });
-
             // Initial load
             loadConfig();
+            loadHistory();
             renderModelConfig();
-            updateSetupStatus();
 
             // Function to handle API calls with exponential backoff
             async function callAPI(model, prompt) {
@@ -419,37 +554,11 @@
                 let currentRetry = 0;
                 let delay = 1000;
                 
-                let payload = {
-                    "model": model.name.toLowerCase().replace(/ /g, '-').replace('(flash)', ''),
-                    "messages": [{ "role": "user", "content": prompt }]
-                };
-
-                if (model.id === "gemini") {
-                    payload = { contents: [{ role: "user", parts: [{ text: prompt }] }] };
-                } else if (model.id === "claude-haiku") {
-                    payload = { messages: [{ role: "user", content: prompt }] };
-                } else if (model.id === "cohere") {
-                    payload = { message: prompt };
-                }
-
                 while (currentRetry < maxRetries) {
                     try {
-                        const headers = { 'Content-Type': 'application/json' };
-                        const finalUrl = model.apiUrl;
-                        
-                        if (model.apiKeyRequired) {
-                            if (!model.apiKey) {
-                                throw new Error("API key is missing.");
-                            }
-                            if (model.id === 'gemini') {
-                                headers['X-goog-api-key'] = model.apiKey;
-                            } else if (model.id === 'claude-haiku') {
-                                headers['x-api-key'] = model.apiKey;
-                                headers['anthropic-version'] = '2023-06-01';
-                            } else {
-                                headers['Authorization'] = `Bearer ${model.apiKey}`;
-                            }
-                        }
+                        const payload = model.getPayload(prompt);
+                        const headers = model.getHeaders(model.apiKey);
+                        const finalUrl = model.apiUrl + (model.id === "gemini" ? model.apiKey : "");
                         
                         const response = await fetch(finalUrl, {
                             method: 'POST',
@@ -462,18 +571,8 @@
                         }
                         
                         const result = await response.json();
-                        let text = "Response not parsed correctly.";
+                        return model.getResponseText(result) || `Error: Could not parse response from ${model.name}.`;
 
-                        if (model.id === "gemini") {
-                            text = result?.candidates?.[0]?.content?.parts?.[0]?.text || text;
-                        } else if (model.id === "claude-haiku") {
-                            text = result?.content?.[0]?.text || text;
-                        } else if (model.id === "cohere") {
-                            text = result?.text || text;
-                        } else {
-                            text = result?.choices?.[0]?.message?.content || text;
-                        }
-                        return text;
                     } catch (error) {
                         console.error(`Error with ${model.name} (Attempt ${currentRetry + 1}):`, error);
                         currentRetry++;
@@ -488,32 +587,7 @@
                 return `Error: Maximum retries exceeded for ${model.name}.`;
             }
 
-            // Send prompt button logic
-            sendPromptButton.addEventListener('click', async () => {
-                const originalPrompt = promptInput.value;
-                if (!originalPrompt.trim()) {
-                    responseContainer.innerHTML = `<div class="p-4 bg-yellow-900 text-yellow-300 rounded-lg">Please enter a prompt.</div>`;
-                    return;
-                }
-
-                const speaker = Object.values(modelConfigurations).find(m => m.zone === 'speaker');
-                const councilMembers = Object.values(modelConfigurations).filter(m => m.zone === 'council');
-                
-                if (!speaker || councilMembers.length !== 4) {
-                    responseContainer.innerHTML = `<div class="p-4 bg-red-900 text-red-300 rounded-lg">Please complete the council setup first.</div>`;
-                    return;
-                }
-                
-                responseContainer.innerHTML = '<div class="text-center text-gray-400 animate-pulse">Generating council responses...</div>';
-                
-                const memberResponses = await Promise.all(councilMembers.map(model => callAPI(model, originalPrompt)));
-
-                responseContainer.innerHTML = '<div class="text-center text-gray-400 animate-pulse">Speaker is synthesizing the council\'s responses...</div>';
-                
-                const synthesisPrompt = `You are a council speaker. The original query was: "${originalPrompt}". The council members have provided the following responses:\n\n${memberResponses.map((r, i) => `Response ${i+1}: ${r}`).join('\n\n')}\n\nSynthesize these responses into a single, comprehensive, and well-structured answer.`;
-
-                const speakerResponse = await callAPI(speaker, synthesisPrompt);
-
+            function displayResponse(speakerResponse, memberResponses, speaker, councilMembers) {
                 responseContainer.innerHTML = `
                     <div class="speaker-response-container">
                         <div class="response-box bg-gray-700 p-6 rounded-2xl shadow-sm border border-indigo-600">
@@ -546,6 +620,41 @@
                 document.getElementById('toggle-members').addEventListener('click', () => {
                     memberResponsesContainer.classList.toggle('hidden');
                 });
+            }
+
+            // Send prompt button logic
+            sendPromptButton.addEventListener('click', async () => {
+                const originalPrompt = promptInput.value;
+                if (!originalPrompt.trim()) {
+                    responseContainer.innerHTML = `<div class="p-4 bg-yellow-900 text-yellow-300 rounded-lg">Please enter a prompt.</div>`;
+                    return;
+                }
+
+                const speaker = Object.values(modelConfigurations).find(m => m.zone === 'speaker');
+                const memberModels = Object.values(modelConfigurations).filter(m => m.zone === 'member');
+                const councilMembers = [speaker, ...memberModels];
+                
+                if (!speaker || memberModels.length < MIN_MEMBERS || memberModels.length > MAX_MEMBERS) {
+                    responseContainer.innerHTML = `<div class="p-4 bg-red-900 text-red-300 rounded-lg">Please complete the council setup first. (1 speaker and ${MIN_MEMBERS}-${MAX_MEMBERS} members)</div>`;
+                    return;
+                }
+                
+                responseContainer.innerHTML = '<div class="text-center text-gray-400 animate-pulse">Generating council responses...</div>';
+                
+                const memberResponses = await Promise.all(councilMembers.map(model => callAPI(model, originalPrompt)));
+
+                responseContainer.innerHTML = '<div class="text-center text-gray-400 animate-pulse">Speaker is synthesizing the council\'s responses...</div>';
+                
+                const synthesisPrompt = `You are a council speaker. The original query was: "${originalPrompt}". The council members have provided the following responses:\n\n${memberResponses.map((r, i) => `Response ${i+1}: ${r}`).join('\n\n')}\n\nSynthesize these responses into a single, comprehensive, and well-structured answer.`;
+
+                const speakerResponse = await callAPI(speaker, synthesisPrompt);
+                
+                // Save to history
+                history.unshift({ prompt: originalPrompt, speakerResponse, memberResponses, speaker, councilMembers });
+                localStorage.setItem(historyKey, JSON.stringify(history));
+                renderHistory();
+
+                displayResponse(speakerResponse, memberResponses.slice(1), speaker, memberModels);
             });
         });
     </script>
