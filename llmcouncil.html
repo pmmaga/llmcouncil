@@ -28,7 +28,7 @@
             background-color: #1f2937;
             color: #d1d5db;
             padding: 1.5rem;
-            padding-top: 4rem; /* Added padding to clear the hamburger menu */
+            padding-top: 4rem;
             transform: translateX(-300px);
             transition: transform 0.3s ease;
             z-index: 10;
@@ -125,6 +125,9 @@
         .prose {
             color: #d1d5db;
         }
+        .prose-pre-wrap {
+            white-space: pre-wrap;
+        }
         .history-item {
             cursor: pointer;
             padding: 0.75rem;
@@ -152,6 +155,25 @@
         .info-button:hover {
             background-color: #6366f1;
         }
+        .tab-button {
+            padding: 0.75rem 1rem;
+            flex: 1;
+            text-align: center;
+            font-weight: bold;
+            color: #6b7280;
+            background-color: #374151;
+            border-top-left-radius: 0.5rem;
+            border-top-right-radius: 0.5rem;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .tab-button.active {
+            background-color: #1f2937;
+            color: #d1d5db;
+        }
+        .tab-content {
+            padding: 1rem;
+        }
     </style>
 </head>
 <body class="bg-gray-900 text-gray-200 flex flex-col items-center p-4">
@@ -163,25 +185,37 @@
         <span></span>
     </div>
 
-    <!-- Sidebar / Setup Tab -->
+    <!-- Sidebar / Tabbed Panel -->
     <div id="sidebar" class="sidebar open">
-        <h2 class="text-xl font-bold mb-6 text-white">Council Setup</h2>
-
-        <div id="setup-status" class="mb-4 text-center text-sm font-semibold text-red-400">
-            Council setup needed.
+        <div class="flex border-b border-gray-600">
+            <button id="setup-tab-button" class="tab-button active">Setup</button>
+            <button id="history-tab-button" class="tab-button">History</button>
+        </div>
+        
+        <div id="setup-tab" class="tab-content">
+            <h2 class="text-xl font-bold mb-6 text-white">Council Setup</h2>
+            <div id="setup-status" class="mb-4 text-center text-sm font-semibold text-red-400">
+                Council setup needed.
+            </div>
+            <div class="space-y-4">
+                <h3 class="text-lg font-bold text-gray-300">Speaker (1)</h3>
+                <div id="speaker-zone" class="drop-zone"></div>
+                <h3 class="text-lg font-bold text-gray-300">Council Members (2-6)</h3>
+                <div id="member-zone" class="drop-zone min-h-[220px]"></div>
+                <h3 class="text-lg font-bold text-gray-300">Configured Models</h3>
+                <div id="configured-zone" class="drop-zone"></div>
+                <h3 class="text-lg font-bold text-gray-300">Unconfigured Models</h3>
+                <div id="unconfigured-zone" class="drop-zone"></div>
+            </div>
+            <div id="save-status" class="mt-4 text-center text-sm font-semibold text-green-500"></div>
         </div>
 
-        <div class="space-y-4">
-            <h3 class="text-lg font-bold text-gray-300">Speaker (1)</h3>
-            <div id="speaker-zone" class="drop-zone"></div>
-            <h3 class="text-lg font-bold text-gray-300">Council Members (2-6)</h3>
-            <div id="member-zone" class="drop-zone min-h-[220px]"></div>
-            <h3 class="text-lg font-bold text-gray-300">Configured Models</h3>
-            <div id="configured-zone" class="drop-zone"></div>
-            <h3 class="text-lg font-bold text-gray-300">Unconfigured Models</h3>
-            <div id="unconfigured-zone" class="drop-zone"></div>
+        <div id="history-tab" class="tab-content hidden">
+            <h2 class="text-xl font-bold mb-6 text-white">History</h2>
+            <div id="history-list" class="space-y-2">
+                <!-- History items will be injected here -->
+            </div>
         </div>
-        <div id="save-status" class="mt-4 text-center text-sm font-semibold text-green-500"></div>
     </div>
 
     <!-- Main Content Area -->
@@ -204,13 +238,6 @@
             <div id="response-container" class="space-y-6">
                 <!-- LLM responses will be injected here -->
             </div>
-
-            <div id="history-container" class="mt-8">
-                <h2 class="text-2xl font-bold text-gray-100 mb-4">History</h2>
-                <div id="history-list" class="space-y-2">
-                    <!-- History items will be injected here -->
-                </div>
-            </div>
         </div>
     </div>
 
@@ -225,6 +252,11 @@
             const responseContainer = document.getElementById('response-container');
             const setupStatus = document.getElementById('setup-status');
             const historyList = document.getElementById('history-list');
+
+            const setupTabButton = document.getElementById('setup-tab-button');
+            const historyTabButton = document.getElementById('history-tab-button');
+            const setupTab = document.getElementById('setup-tab');
+            const historyTab = document.getElementById('history-tab');
 
             const speakerZone = document.getElementById('speaker-zone');
             const memberZone = document.getElementById('member-zone');
@@ -245,7 +277,7 @@
                 },
                 {
                     id: "openai-gpt",
-                    name: "OpenAI GPT-4",
+                    name: "OpenAI GPT-4 Turbo",
                     apiKeyRequired: true,
                     apiUrl: "https://api.openai.com/v1/chat/completions",
                     keyInfo: "Find your key on the OpenAI API Keys dashboard.",
@@ -380,12 +412,20 @@
 
             function renderHistory() {
                 historyList.innerHTML = '';
+                if (history.length === 0) {
+                    historyList.innerHTML = `<div class="text-center text-gray-500">No history yet.</div>`;
+                    return;
+                }
                 history.forEach((item, index) => {
                     const historyItem = document.createElement('div');
                     historyItem.classList.add('history-item', 'text-gray-200');
-                    historyItem.textContent = `${index + 1}. ${item.prompt.substring(0, 50)}...`;
+                    historyItem.textContent = `${index + 1}. ${item.prompt.substring(0, 50)}${item.prompt.length > 50 ? '...' : ''}`;
                     historyItem.addEventListener('click', () => {
                         displayResponse(item.speakerResponse, item.memberResponses, item.speaker, item.councilMembers);
+                        // Switch to main content view
+                        if (sidebar.classList.contains('open')) {
+                            hamburgerMenu.click();
+                        }
                     });
                     historyList.appendChild(historyItem);
                 });
@@ -404,7 +444,7 @@
                     modelItem.dataset.modelId = model.id;
 
                     const isConfigured = config.apiKey.trim() !== "";
-                    if (isConfigured && config.zone !== 'unconfigured') {
+                    if (isConfigured) {
                         modelItem.classList.add('draggable');
                         modelItem.draggable = true;
                     }
@@ -465,6 +505,20 @@
                     sendPromptButton.disabled = true;
                 }
             }
+
+            // --- Tab Switching ---
+            setupTabButton.addEventListener('click', () => {
+                setupTabButton.classList.add('active');
+                historyTabButton.classList.remove('active');
+                setupTab.classList.remove('hidden');
+                historyTab.classList.add('hidden');
+            });
+            historyTabButton.addEventListener('click', () => {
+                historyTabButton.classList.add('active');
+                setupTabButton.classList.remove('active');
+                historyTab.classList.remove('hidden');
+                setupTab.classList.add('hidden');
+            });
 
             // --- Drag & Drop Event Listeners ---
             function handleDragStart(event) {
@@ -592,7 +646,7 @@
                     <div class="speaker-response-container">
                         <div class="response-box bg-gray-700 p-6 rounded-2xl shadow-sm border border-indigo-600">
                             <h3 class="text-lg font-bold text-indigo-400 mb-2">${speaker.name} (Council Speaker)</h3>
-                            <div class="prose max-w-none text-gray-200">
+                            <div class="prose prose-pre-wrap max-w-none text-gray-200">
                                 ${speakerResponse}
                             </div>
                             <button id="toggle-members" class="mt-4 px-4 py-2 bg-gray-600 text-white rounded-full text-sm font-semibold hover:bg-gray-500 transition-colors">
@@ -611,7 +665,7 @@
                     const responseHTML = `
                         <div class="response-box bg-gray-800 p-6 rounded-2xl shadow-sm">
                             <h4 class="text-base font-bold text-gray-300 mb-2">${model.name}</h4>
-                            <div class="prose max-w-none text-gray-400">${response}</div>
+                            <div class="prose prose-pre-wrap max-w-none text-gray-400">${response}</div>
                         </div>
                     `;
                     memberResponsesContainer.innerHTML += responseHTML;
