@@ -296,7 +296,7 @@
                     id: "gemini",
                     name: "Google Gemini (flash)",
                     apiKeyRequired: true,
-                    apiUrl: `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=`,
+                    apiUrl: `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent`,
                     keyInfo: "Get your key from Google AI Studio or the Google Cloud Console.",
                     getPayload: (prompt) => ({ contents: [{ role: "user", parts: [{ text: prompt }] }] }),
                     getHeaders: (apiKey) => ({ 'Content-Type': 'application/json', 'X-goog-api-key': apiKey }),
@@ -304,21 +304,21 @@
                 },
                 {
                     id: "openai-gpt",
-                    name: "OpenAI GPT-4 Turbo",
+                    name: "OpenAI GPT-5",
                     apiKeyRequired: true,
-                    apiUrl: "https://api.openai.com/v1/chat/completions",
+                    apiUrl: "https://api.openai.com/v1/responses",
                     keyInfo: "Find your key on the OpenAI API Keys dashboard.",
-                    getPayload: (prompt) => ({ "model": "gpt-4-turbo", "messages": [{ "role": "user", "content": prompt }] }),
+                    getPayload: (prompt) => ({ "model": "gpt-5", "input": prompt }),
                     getHeaders: (apiKey) => ({ 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` }),
                     getResponseText: (result) => result?.choices?.[0]?.message?.content
                 },
                 {
-                    id: "groq-mixtral",
-                    name: "Groq Mixtral",
+                    id: "groq-deepseek",
+                    name: "Groq DeepSeek",
                     apiKeyRequired: true,
                     apiUrl: "https://api.groq.com/openai/v1/chat/completions",
                     keyInfo: "Get your key from the GroqCloud developer dashboard.",
-                    getPayload: (prompt) => ({ "model": "mixtral-8x7b-32768", "messages": [{ "role": "user", "content": prompt }] }),
+                    getPayload: (prompt) => ({ "model": "deepseek-r1-distill-llama-70b", "messages": [{ "role": "user", "content": prompt }] }),
                     getHeaders: (apiKey) => ({ 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` }),
                     getResponseText: (result) => result?.choices?.[0]?.message?.content
                 },
@@ -404,23 +404,39 @@
             // Load from local storage or initialize
             function loadConfig() {
                 const savedConfig = localStorage.getItem(localStorageKey);
+                let loadedApiKeys = {};
+                let raw = {};
                 if (savedConfig) {
-                    modelConfigurations = JSON.parse(savedConfig);
-                } else {
-                    // Initial setup, all models are unconfigured
-                    modelConfigurations = allModels.reduce((acc, model) => {
-                        acc[model.id] = {
-                            apiKey: "",
-                            zone: 'unconfigured',
-                            ...model
-                        };
-                        return acc;
-                    }, {});
+                    // Only keep keys for models that exist in allModels
+                    raw = JSON.parse(savedConfig);
+                    loadedApiKeys = Object.keys(raw)
+                        .filter(id => allModels.some(m => m.id === id))
+                        .reduce((acc, id) => {
+                            acc[id] = raw[id].apiKey || "";
+                            return acc;
+                        }, {});
                 }
+                // Always build modelConfigurations from allModels, only injecting apiKey and zone if present
+                modelConfigurations = allModels.reduce((acc, model) => {
+                    acc[model.id] = {
+                        ...model,
+                        apiKey: loadedApiKeys[model.id] || "",
+                        zone: (loadedApiKeys[model.id] && loadedApiKeys[model.id] !== "") ? (raw && raw[model.id]?.zone) || 'configured' : 'unconfigured'
+                    };
+                    return acc;
+                }, {});
             }
 
             function saveConfig() {
-                localStorage.setItem(localStorageKey, JSON.stringify(modelConfigurations));
+                // Only store apiKey and zone for each model
+                const toStore = {};
+                Object.values(modelConfigurations).forEach(model => {
+                    toStore[model.id] = {
+                        apiKey: model.apiKey || "",
+                        zone: model.zone || "unconfigured"
+                    };
+                });
+                localStorage.setItem(localStorageKey, JSON.stringify(toStore));
                 saveStatus.textContent = "Configuration saved!";
                 saveStatus.className = 'mt-4 text-center text-sm font-semibold text-green-500';
                 setTimeout(() => {
@@ -639,7 +655,7 @@
                     try {
                         const payload = model.getPayload(prompt);
                         const headers = model.getHeaders(model.apiKey);
-                        const finalUrl = model.apiUrl + (model.id === "gemini" ? model.apiKey : "");
+                        const finalUrl = model.apiUrl;
                         
                         const response = await fetch(finalUrl, {
                             method: 'POST',
