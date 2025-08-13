@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>The LLM Council</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
         body {
             font-family: 'Inter', sans-serif;
@@ -125,8 +126,34 @@
         .prose {
             color: #d1d5db;
         }
-        .prose-pre-wrap {
-            white-space: pre-wrap;
+        .prose h1, .prose h2, .prose h3, .prose h4 {
+            color: #e0e0e0;
+            font-weight: bold;
+            margin-top: 1.5em;
+            margin-bottom: 0.5em;
+        }
+        .prose pre {
+            background-color: #1f2937;
+            border: 1px solid #4b5563;
+            border-radius: 0.5rem;
+            padding: 1rem;
+            overflow-x: auto;
+        }
+        .prose code {
+            font-family: monospace;
+            background-color: #1f2937;
+            border-radius: 0.25rem;
+            padding: 0.2em 0.4em;
+        }
+        .prose blockquote {
+            border-left: 4px solid #6366f1;
+            padding-left: 1rem;
+            font-style: italic;
+            color: #9ca3af;
+        }
+        .prose ul, .prose ol {
+            margin-left: 1.5rem;
+            list-style-position: outside;
         }
         .history-item {
             cursor: pointer;
@@ -634,7 +661,7 @@
                             await new Promise(resolve => setTimeout(resolve, delay));
                             delay *= 2;
                         } else {
-                            return `Error: Failed to get a response from ${model.name}. Check your API key and network connection.`;
+                            return `Error: Maximum retries exceeded for ${model.name}.`;
                         }
                     }
                 }
@@ -642,12 +669,14 @@
             }
 
             function displayResponse(speakerResponse, memberResponses, speaker, councilMembers) {
+                const speakerHtml = marked.parse(speakerResponse);
+                
                 responseContainer.innerHTML = `
                     <div class="speaker-response-container">
                         <div class="response-box bg-gray-700 p-6 rounded-2xl shadow-sm border border-indigo-600">
                             <h3 class="text-lg font-bold text-indigo-400 mb-2">${speaker.name} (Council Speaker)</h3>
-                            <div class="prose prose-pre-wrap max-w-none text-gray-200">
-                                ${speakerResponse}
+                            <div class="prose max-w-none text-gray-200">
+                                ${speakerHtml}
                             </div>
                             <button id="toggle-members" class="mt-4 px-4 py-2 bg-gray-600 text-white rounded-full text-sm font-semibold hover:bg-gray-500 transition-colors">
                                 Show Individual Responses
@@ -662,10 +691,11 @@
                 const memberResponsesContainer = document.getElementById('member-responses-container');
                 memberResponses.forEach((response, index) => {
                     const model = councilMembers[index];
+                    const memberHtml = marked.parse(response);
                     const responseHTML = `
                         <div class="response-box bg-gray-800 p-6 rounded-2xl shadow-sm">
                             <h4 class="text-base font-bold text-gray-300 mb-2">${model.name}</h4>
-                            <div class="prose prose-pre-wrap max-w-none text-gray-400">${response}</div>
+                            <div class="prose max-w-none text-gray-400">${memberHtml}</div>
                         </div>
                     `;
                     memberResponsesContainer.innerHTML += responseHTML;
