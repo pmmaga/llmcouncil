@@ -754,7 +754,7 @@
                 localStorage.setItem(historyKey, JSON.stringify(history));
                 renderHistory();
 
-                displayResponse(speakerResponse, memberResponses.slice(1), speaker, memberModels);
+                displayResponse(speakerResponse, memberResponses, speaker, councilMembers);
             });
         });
     </script>
