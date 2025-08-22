@@ -13,7 +13,7 @@ I remember using a desktop tool called Copernic(?) that was a search engine aggr
 - Persist configuration and query history in browser localStorage.
 
 ## How to use
-1. Open `index.html` in a browser (prefer running from a local server).
+1. Open `index.html` in a browser. It is also hosted on [GitHub Pages](https://pmmaga.github.io/llmcouncil/) if you just want to use it.
 2. Enter API keys and configure models in the sidebar.
 3. Drag one model into the "Speaker" slot and 2–6 models into the "Council Members" area.
 4. Enter a prompt and click Send. The app will call each model, then call the Speaker to synthesize output and save the session to history.
