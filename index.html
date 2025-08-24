@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>The LLM Council</title>
-    <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tailwindcss/dist/tailwind.min.css">
     <style>
         body {
             font-family: 'Inter', sans-serif;
@@ -201,6 +201,57 @@
         .tab-content {
             padding: 1rem;
         }
+        .status-box {
+            padding: 1rem;
+            background-color: #1f2937;
+            border-radius: 1rem;
+            border: 1px solid #374151;
+        }
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 0;
+            color: #d1d5db;
+        }
+        .status-icon-loading {
+            color: #6366f1;
+            animation: spin 1.5s linear infinite;
+        }
+        .status-icon-success {
+            color: #4ade80;
+        }
+        .status-icon-error {
+            color: #f87171;
+        }
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        .collapsible-header {
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background-color: #2d3748;
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+        .collapsible-content {
+            overflow: hidden;
+            transition: max-height 0.3s ease-out;
+            max-height: 500px; /* Adjust as needed */
+        }
+        .collapsible-content.collapsed {
+            max-height: 0;
+        }
+        .collapsible-icon {
+            transition: transform 0.3s ease;
+        }
+        .collapsible-icon.rotated {
+            transform: rotate(180deg);
+        }
     </style>
 </head>
 <body class="bg-gray-900 text-gray-200 flex flex-col items-center p-4">
@@ -221,6 +272,28 @@
         
         <div id="setup-tab" class="tab-content">
             <h2 class="text-xl font-bold mb-6 text-white">Council Setup</h2>
+
+            <!-- Collapsible Setup Explanation -->
+            <div id="setup-explanation-collapsible">
+                <div class="collapsible-header">
+                    <h3 class="text-lg font-bold text-gray-300">How It Works</h3>
+                    <i id="explanation-icon" class="fas fa-chevron-up collapsible-icon text-gray-400"></i>
+                </div>
+                <div id="setup-explanation-content" class="collapsible-content">
+                    <div class="text-sm text-gray-400 mb-6 mt-4">
+                        <p class="mb-2">To begin, configure your LLM Council by dragging and dropping models into the appropriate zones below. You'll need to provide an API key for each model you wish to use.</p>
+                        <p class="mb-2">Once configured, the council members (including the speaker) will provide their individual responses to your query. The <strong>Speaker</strong> will then synthesize these responses into a single, comprehensive answer.</p>
+                        <ul class="list-disc list-inside space-y-1">
+                            <li><strong>Speaker:</strong> Select one LLM to act as the council speaker.</li>
+                            <li><strong>Council Members:</strong> Choose 2 to 6 LLMs to be council members.</li>
+                            <li><strong>Configured Models:</strong> Models with a valid API key will appear here.</li>
+                            <li><strong>Unconfigured Models:</strong> Models without an API key will be here. You must provide a key before they can be added to the council.</li>
+                        </ul>
+                        <p class="mt-4">You can find more details on the project <a class="font-medium text-blue-600 dark:text-blue-500 hover:underline" href="https://github.com/pmmaga/llmcouncil/blob/main/README.md">README</a>.</p>
+                    </div>
+                </div>
+            </div>
+
             <div id="setup-status" class="mb-4 text-center text-sm font-semibold text-red-400">
                 Council setup needed.
             </div>
@@ -261,7 +334,21 @@
                     </button>
                 </div>
             </div>
+            
+            <!-- Real-time Status Panel -->
+            <div id="status-panel-container" class="hidden">
+                <div class="collapsible-header">
+                    <h3 class="text-lg font-bold text-gray-300">Request Status</h3>
+                    <i id="status-icon" class="fas fa-chevron-up collapsible-icon text-gray-400"></i>
+                </div>
+                <div id="status-panel-content" class="collapsible-content">
+                    <div id="status-panel" class="status-box space-y-2 mt-2">
+                        <!-- Status items will be injected here -->
+                    </div>
+                </div>
+            </div>
 
+            <!-- Response Container -->
             <div id="response-container" class="space-y-6">
                 <!-- LLM responses will be injected here -->
             </div>
@@ -289,6 +376,16 @@
             const memberZone = document.getElementById('member-zone');
             const configuredZone = document.getElementById('configured-zone');
             const unconfiguredZone = document.getElementById('unconfigured-zone');
+
+            // Collapsible elements
+            const setupExplanationHeader = document.getElementById('setup-explanation-collapsible').querySelector('.collapsible-header');
+            const setupExplanationContent = document.getElementById('setup-explanation-content');
+            const setupExplanationIcon = document.getElementById('explanation-icon');
+            const statusPanelContainer = document.getElementById('status-panel-container');
+            const statusPanelHeader = statusPanelContainer.querySelector('.collapsible-header');
+            const statusPanelContent = document.getElementById('status-panel-content');
+            const statusPanelIcon = document.getElementById('status-icon');
+            const statusPanel = document.getElementById('status-panel');
 
             // Model definitions with key instructions and refactored API logic
             const allModels = [
@@ -549,6 +646,23 @@
                 }
             }
 
+            // --- Collapsible Logic ---
+            function setupCollapsible(header, content, icon) {
+                header.addEventListener('click', () => {
+                    const isCollapsed = content.classList.toggle('collapsed');
+                    if (isCollapsed) {
+                        content.style.maxHeight = '0';
+                        icon.classList.remove('rotated');
+                    } else {
+                        content.style.maxHeight = content.scrollHeight + 'px';
+                        icon.classList.add('rotated');
+                    }
+                });
+            }
+
+            setupCollapsible(setupExplanationHeader, setupExplanationContent, setupExplanationIcon);
+            setupCollapsible(statusPanelHeader, statusPanelContent, statusPanelIcon);
+
             // --- Tab Switching ---
             setupTabButton.addEventListener('click', () => {
                 setupTabButton.classList.add('active');
@@ -633,7 +747,6 @@
             document.addEventListener('dragend', handleDragEnd);
 
             // --- Other Event Listeners ---
-
             hamburgerMenu.addEventListener('click', () => {
                 sidebar.classList.toggle('open');
                 mainContent.classList.toggle('shifted');
@@ -644,15 +757,18 @@
             loadConfig();
             loadHistory();
             renderModelConfig();
+            setupExplanationContent.style.maxHeight = setupExplanationContent.scrollHeight + 'px';
 
-            // Function to handle API calls with exponential backoff
-            async function callAPI(model, prompt) {
+            // Function to handle API calls with exponential backoff and status updates
+            async function callAPI(model, prompt, statusElement) {
                 const maxRetries = 5;
                 let currentRetry = 0;
                 let delay = 1000;
                 
                 while (currentRetry < maxRetries) {
                     try {
+                        statusElement.innerHTML = `<i class="fas fa-spinner fa-spin status-icon-loading"></i> Asking ${model.name}...`;
+
                         const payload = model.getPayload(prompt);
                         const headers = model.getHeaders(model.apiKey);
                         const finalUrl = model.apiUrl;
@@ -668,6 +784,7 @@
                         }
                         
                         const result = await response.json();
+                        statusElement.innerHTML = `<i class="fas fa-check-circle status-icon-success"></i> ${model.name} answered (Attempt ${currentRetry + 1})`;
                         return model.getResponseText(result) || `Error: Could not parse response from ${model.name}.`;
 
                     } catch (error) {
@@ -677,10 +794,12 @@
                             await new Promise(resolve => setTimeout(resolve, delay));
                             delay *= 2;
                         } else {
+                            statusElement.innerHTML = `<i class="fas fa-times-circle status-icon-error"></i> ${model.name} failed to answer (Attempt ${currentRetry + 1})`;
                             return `Error: Maximum retries exceeded for ${model.name}.`;
                         }
                     }
                 }
+                statusElement.innerHTML = `<i class="fas fa-times-circle status-icon-error"></i> ${model.name} failed to answer (Attempt ${currentRetry + 1})`;
                 return `Error: Maximum retries exceeded for ${model.name}.`;
             }
 
@@ -738,19 +857,41 @@
                     responseContainer.innerHTML = `<div class="p-4 bg-red-900 text-red-300 rounded-lg">Please complete the council setup first. (1 speaker and ${MIN_MEMBERS}-${MAX_MEMBERS} members)</div>`;
                     return;
                 }
-                
-                responseContainer.innerHTML = '<div class="text-center text-gray-400 animate-pulse">Generating council responses...</div>';
-                
-                const memberResponses = await Promise.all(councilMembers.map(model => callAPI(model, originalPrompt)));
 
-                responseContainer.innerHTML = '<div class="text-center text-gray-400 animate-pulse">Speaker is synthesizing the council\'s responses...</div>';
+                // Show status panel and clear response container
+                statusPanelContainer.classList.remove('hidden');
+                responseContainer.innerHTML = '';
+                statusPanel.innerHTML = '';
+
+                // Add status items for members
+                const memberStatusElements = councilMembers.map(model => {
+                    const statusItem = document.createElement('div');
+                    statusItem.classList.add('status-item');
+                    statusPanel.appendChild(statusItem);
+                    return statusItem;
+                });
                 
+                // Add status item for speaker
+                const speakerStatusElement = document.createElement('div');
+                speakerStatusElement.classList.add('status-item');
+                statusPanel.appendChild(speakerStatusElement);
+
+                // Call all member APIs and track status
+                const memberResponses = await Promise.all(councilMembers.map((model, index) => {
+                    return callAPI(model, originalPrompt, memberStatusElements[index]);
+                }));
+
+                // Synthesize responses with speaker
                 const synthesisPrompt = `You are a council speaker. The original query was: "${originalPrompt}". The council members have provided the following responses:\n\n${memberResponses.map((r, i) => `Response ${i+1}: ${r}`).join('\n\n')}\n\nSynthesize these responses into a single, comprehensive, and well-structured answer.`;
-
-                const speakerResponse = await callAPI(speaker, synthesisPrompt);
+                const speakerResponse = await callAPI(speaker, synthesisPrompt, speakerStatusElement);
                 
+                // Collapse the status panel after completion
+                statusPanelContent.style.maxHeight = '0';
+                statusPanelContent.classList.add('collapsed');
+                statusPanelIcon.classList.remove('rotated');
+
                 // Save to history
-                history.unshift({ prompt: originalPrompt, speakerResponse, memberResponses, speaker, councilMembers });
+                history.unshift({ prompt: originalPrompt, speakerResponse, memberResponses, speaker, councilMembers: councilMembers });
                 localStorage.setItem(historyKey, JSON.stringify(history));
                 renderHistory();
 
