@@ -882,7 +882,7 @@
                 }));
 
                 // Synthesize responses with speaker
-                const synthesisPrompt = `You are a council speaker. The original query was: "${originalPrompt}". The council members have provided the following responses:\n\n${memberResponses.map((r, i) => `Response ${i+1}: ${r}`).join('\n\n')}\n\nSynthesize these responses into a single, comprehensive, and well-structured answer.`;
+                const synthesisPrompt = `You are a council speaker. Your main goal is to provide a single answer based on multiple responses given by different conuncil members. No roleplaying, be objective. The original query was: "${originalPrompt}". The council members have provided the following responses:\n\n${memberResponses.map((r, i) => `Response ${i+1}: ${r}`).join('\n\n')}\n\nSynthesize these responses into a single, comprehensive, and well-structured answer. Highlight any common themes, agreements, or differing viewpoints among the responses. Your synthesized answer should be clear, concise, and directly address the original query.`;
                 const speakerResponse = await callAPI(speaker, synthesisPrompt, speakerStatusElement);
                 
                 // Collapse the status panel after completion
